@@ -21,19 +21,27 @@ pub struct Object {
     pub density: f32,
 }
 impl Object {
+    #[inline(always)]
     pub fn collision(&self, other: &Self) -> bool {
         self.pos.distance_to(other.pos) <= self.size + other.size
     }
+    #[inline(always)]
     pub fn mass(&self) -> f32 {
         self.density * self.size
     }
+    #[inline(always)]
     pub fn collision_response(a: &Object, b: &Object) -> (Vector2, Vector2, Vector2, Vector2) {
         let delta = b.pos - a.pos;
         let dist_sq = delta.length_sqr();
         let radii = a.size + b.size;
 
         if dist_sq >= radii * radii {
-            return (Vector2::zero(), Vector2::zero(), Vector2::zero(), Vector2::zero());
+            return (
+                Vector2::zero(),
+                Vector2::zero(),
+                Vector2::zero(),
+                Vector2::zero(),
+            );
         }
 
         let dist = dist_sq.sqrt().max(1e-6);
@@ -45,7 +53,12 @@ impl Object {
         let inv_mass_sum = inv_mass_a + inv_mass_b;
 
         if inv_mass_sum == 0.0 {
-            return (Vector2::zero(), Vector2::zero(), Vector2::zero(), Vector2::zero());
+            return (
+                Vector2::zero(),
+                Vector2::zero(),
+                Vector2::zero(),
+                Vector2::zero(),
+            );
         }
 
         let percent = 0.8;
@@ -53,7 +66,7 @@ impl Object {
 
         let correction_mag = ((penetration - slop).max(0.0) / inv_mass_sum) * percent;
         let pos_a = -normal * correction_mag * inv_mass_a;
-        let pos_b =  normal * correction_mag * inv_mass_b;
+        let pos_b = normal * correction_mag * inv_mass_b;
 
         let rv = b.vel - a.vel;
         let vel_along_normal = rv.dot(normal);
@@ -67,11 +80,11 @@ impl Object {
         let impulse = normal * j;
 
         let vel_a = -impulse * inv_mass_a;
-        let vel_b =  impulse * inv_mass_b;
+        let vel_b = impulse * inv_mass_b;
 
         (pos_a, pos_b, vel_a, vel_b)
     }
-
+    #[inline(always)]
     pub fn update(engine: &mut Engine, _: (&mut RaylibHandle, &mut RaylibThread), dt: f32) {
         let entities: Vec<Entity> = engine
             .world
@@ -112,11 +125,27 @@ impl Object {
             body.vel += dv;
         }
     }
+    #[inline(always)]
     pub fn draw(engine: &mut Engine, (d, _): (&mut RaylibDrawHandle, &mut RaylibThread)) {
-        
+        let asset_server = engine.resource::<AssetServer>();
         for (e, object) in engine.world.query::<(Entity, &Object)>().iter() {
+            if let Some(asset) = engine.world.get::<&Asset>(e).ok()
+                && let Some(asset_server) = asset_server
+                && let Some(texture) = asset_server.assets.get(asset.path)
+            {
+                let size = Vector2::new(texture.width as f32, texture.height as f32);
+                let src_rect = Rectangle::new(0.0, 0.0, size.x, size.y);
+                let dst_rect = Rectangle::new(object.pos.x, object.pos.y, size.x, size.y);
+                d.draw_texture_pro(
+                    texture,
+                    src_rect,
+                    dst_rect,
+                    size / 2.0,
+                    object.dir,
+                    Color::WHITE,
+                );
+            }
             d.draw_circle_lines_v(object.pos, object.size, Color::WHITE);
-            if let Ok(asset) = engine.world.get::<&Asset>(e) {}
         }
     }
 }

@@ -2,7 +2,10 @@
 use hecs::{DynamicBundle, Entity, NoSuchEntity, World};
 use raylib::{RaylibHandle, RaylibThread, camera::Camera2D, prelude::*};
 use std::{
-    any::{Any, TypeId}, collections::HashMap, fs, path::Path
+    any::{Any, TypeId},
+    collections::HashMap,
+    fs,
+    path::Path,
 };
 
 #[derive(Debug, Clone, PartialEq)]

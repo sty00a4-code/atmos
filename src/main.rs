@@ -2,7 +2,7 @@ pub mod base;
 pub mod engine;
 
 use base::BasePlugin;
-use engine::{Engine, EngineConfig};
+use engine::{AssetServer, Engine, EngineConfig};
 
 fn main() {
     let mut engine = Engine::default();
@@ -12,6 +12,7 @@ fn main() {
         h: (1080.0 / 1.5) as i32,
         ..Default::default()
     });
+    engine.add_resource(AssetServer::load(&mut rl, &thread));
     engine.add_plugin::<BasePlugin>(&mut rl, &thread);
     engine.run(&mut rl, &mut thread);
 }
