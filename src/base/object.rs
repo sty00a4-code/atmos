@@ -131,7 +131,7 @@ impl Object {
         for (e, object) in engine.world.query::<(Entity, &Object)>().iter() {
             if let Some(asset) = engine.world.get::<&Asset>(e).ok()
                 && let Some(asset_server) = asset_server
-                && let Some(texture) = asset_server.assets.get(asset.path)
+                && let Some(texture) = asset_server.get(asset.path)
             {
                 let size = Vector2::new(texture.width as f32, texture.height as f32);
                 let src_rect = Rectangle::new(0.0, 0.0, size.x, size.y);

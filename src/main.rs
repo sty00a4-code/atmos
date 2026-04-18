@@ -12,7 +12,7 @@ fn main() {
         h: (1080.0 / 1.5) as i32,
         ..Default::default()
     });
-    engine.add_resource(AssetServer::load(&mut rl, &thread));
+    engine.add_resource(AssetServer::load());
     engine.add_plugin::<BasePlugin>(&mut rl, &thread);
     engine.run(&mut rl, &mut thread);
 }

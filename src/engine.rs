@@ -48,9 +48,7 @@ impl Engine {
         builder.build()
     }
     pub fn run(&mut self, rl: &mut RaylibHandle, thread: &mut RaylibThread) {
-        if let Some(asset_server) = self.resources.get_mut::<AssetServer>() {
-            asset_server.load_textures(rl, thread);
-        }
+        self.add_update(Asset::update);
         // startup
         let startups = std::mem::take(&mut self.systems.startups);
         for startup in &startups {
@@ -92,6 +90,7 @@ pub struct Systems {
 pub type StartupFn = fn(&mut Engine, (&mut RaylibHandle, &mut RaylibThread));
 pub type UpdateFn = fn(&mut Engine, (&mut RaylibHandle, &mut RaylibThread), f32);
 pub type DrawFn = fn(&mut Engine, (&mut RaylibDrawHandle, &mut RaylibThread));
+pub type DespawnFn = fn(&mut Engine, (&mut RaylibDrawHandle, &mut RaylibThread), Entity);
 #[derive(Default)]
 pub struct Resources {
     map: HashMap<TypeId, Box<dyn Any>>,
@@ -182,7 +181,9 @@ impl Engine {
 
 pub type SubscriptionId = u64;
 
-pub type Subscriber = (SubscriptionId, Box<dyn Fn(&dyn Any) + Send + Sync>);
+pub type SuvscriberFn =
+    Box<dyn Fn(&mut Engine, (&mut RaylibHandle, &mut RaylibThread), &dyn Any) + Send + Sync>;
+pub type Subscriber = (SubscriptionId, SuvscriberFn);
 pub type Event = dyn Any + Send + Sync;
 /// A simple observer/event-bus that stores events as `Any` and allows typed subscriptions.
 pub struct EventBus {
@@ -203,22 +204,27 @@ impl Default for EventBus {
     }
 }
 
+pub trait EventType: Any + Send + Sync + 'static {}
 impl EventBus {
     #[inline(always)]
     pub fn subscribe<E, F>(&mut self, f: F) -> SubscriptionId
     where
-        E: Any + Send + Sync + 'static,
-        F: Fn(&E) + Send + Sync + 'static,
+        E: EventType,
+        F: Fn(&mut Engine, (&mut RaylibHandle, &mut RaylibThread), &E) + Send + Sync + 'static,
     {
         let tid = TypeId::of::<E>();
         let id = self.next_id;
         self.next_id += 1;
 
-        let wrapper = Box::new(move |e: &dyn Any| {
-            if let Some(typed) = e.downcast_ref::<E>() {
-                f(typed);
-            }
-        }) as Box<dyn Fn(&dyn Any) + Send + Sync>;
+        let wrapper = Box::new(
+            move |engine: &mut Engine,
+                  (rl, thread): (&mut RaylibHandle, &mut RaylibThread),
+                  e: &dyn Any| {
+                if let Some(typed) = e.downcast_ref::<E>() {
+                    f(engine, (rl, thread), typed);
+                }
+            },
+        ) as SuvscriberFn;
 
         self.listeners.entry(tid).or_default().push((id, wrapper));
         id
@@ -245,14 +251,18 @@ impl EventBus {
     }
 
     #[inline(always)]
-    pub fn dispatch(&mut self) {
+    pub fn dispatch(
+        &mut self,
+        engine: &mut Engine,
+        (rl, thread): (&mut RaylibHandle, &mut RaylibThread),
+    ) {
         let mut drained = Vec::new();
         std::mem::swap(&mut drained, &mut self.queue);
         for boxed in drained {
             let tid = (*boxed).type_id();
             if let Some(list) = self.listeners.get(&tid) {
                 for (_, cb) in list.iter() {
-                    cb(&*boxed);
+                    cb(engine, (rl, thread), &*boxed);
                 }
             }
         }
@@ -263,6 +273,14 @@ impl EventBus {
         self.listeners.clear();
     }
 }
+pub struct EntitySpawnEvent {
+    pub entity: Entity,
+}
+impl EventType for EntitySpawnEvent {}
+pub struct EntityDespawnEvent {
+    pub entity: Entity,
+}
+impl EventType for EntityDespawnEvent {}
 
 pub trait Plugin {
     fn add_plugin(engine: &mut Engine, rl: &mut RaylibHandle, thread: &RaylibThread);
@@ -275,7 +293,7 @@ pub struct AssetServer {
 }
 impl AssetServer {
     #[inline(always)]
-    pub fn load(rl: &mut RaylibHandle, thread: &RaylibThread) -> Self {
+    pub fn load() -> Self {
         let mut paths = HashMap::new();
 
         fn load_dir(dir: &Path, paths: &mut HashMap<String, String>, base: &Path) {
@@ -298,12 +316,10 @@ impl AssetServer {
         let assets_path = Path::new("assets");
         load_dir(assets_path, &mut paths, assets_path);
 
-        let mut server = Self {
+        Self {
             assets: HashMap::new(),
             paths,
-        };
-        server.load_textures(rl, thread);
-        server
+        }
     }
 
     #[inline(always)]
@@ -314,9 +330,49 @@ impl AssetServer {
             }
         }
     }
+
+    #[inline(always)]
+    pub fn get(&self, key: &str) -> Option<&Texture2D> {
+        self.assets.get(key)
+    }
+
+    #[inline(always)]
+    pub fn get_load(
+        &mut self,
+        key: &str,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+    ) -> Option<&Texture2D> {
+        if let Some(path) = self.paths.get(key).map(|s| s.as_str())
+            && !self.assets.contains_key(key)
+            && let Ok(texture) = rl.load_texture(thread, path)
+        {
+            self.assets.insert(key.to_string(), texture);
+        }
+        self.assets.get(key)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Asset {
     pub path: &'static str,
+}
+
+impl Asset {
+    pub fn update(
+        engine: &mut Engine,
+        (rl, thread): (&mut RaylibHandle, &mut RaylibThread),
+        _: f32,
+    ) {
+        let mut paths = vec![];
+        for asset in engine.world.query::<&Self>().iter() {
+            paths.push(asset.path);
+        }
+        let Some(asset_server) = engine.resource_mut::<AssetServer>() else {
+            return;
+        };
+        for path in paths {
+            asset_server.get_load(path, rl, thread);
+        }
+    }
 }
