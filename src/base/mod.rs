@@ -1,10 +1,12 @@
 pub mod camera;
+pub mod controller;
 pub mod object;
 
 use crate::{base::object::Object, engine::*};
 use raylib::prelude::*;
 
 use camera::CameraPlugin;
+use controller::ControllerPlugin;
 use object::ObjectPlugin;
 
 #[derive(Debug, Default)]
@@ -15,20 +17,8 @@ impl Plugin for BasePlugin {
         engine
             .add_draw(clear_background)
             .add_plugin::<CameraPlugin>(rl, thread)
-            .add_plugin::<ObjectPlugin>(rl, thread);
-        engine.spawn((
-            Object {
-                pos: Vector2::zero(),
-                vel: Vector2::one().normalized() * 200.0,
-                dir: 0.0,
-                tor: 100.0,
-                size: 110.0,
-                density: 1.0,
-            },
-            Asset {
-                path: "space1/Ships/spaceShips_002.png",
-            },
-        ));
+            .add_plugin::<ObjectPlugin>(rl, thread)
+            .add_plugin::<ControllerPlugin>(rl, thread);
         engine.spawn((
             Object {
                 pos: Vector2::one() * 500.0,

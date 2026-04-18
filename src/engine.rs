@@ -273,17 +273,14 @@ impl EventBus {
         self.listeners.clear();
     }
 }
-pub struct EntitySpawnEvent {
-    pub entity: Entity,
-}
-impl EventType for EntitySpawnEvent {}
-pub struct EntityDespawnEvent {
-    pub entity: Entity,
-}
-impl EventType for EntityDespawnEvent {}
 
 pub trait Plugin {
     fn add_plugin(engine: &mut Engine, rl: &mut RaylibHandle, thread: &RaylibThread);
+}
+pub trait Combination {
+    type Query<'a>;
+    type QueryMut<'a>;
+    fn comp(self) -> impl DynamicBundle;
 }
 
 #[derive(Debug, Default)]
