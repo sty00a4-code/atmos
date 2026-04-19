@@ -278,8 +278,6 @@ pub trait Plugin {
     fn add_plugin(engine: &mut Engine, rl: &mut RaylibHandle, thread: &RaylibThread);
 }
 pub trait Combination {
-    type Query<'a>;
-    type QueryMut<'a>;
     fn comp(self) -> impl DynamicBundle;
 }
 
@@ -334,19 +332,13 @@ impl AssetServer {
     }
 
     #[inline(always)]
-    pub fn get_load(
-        &mut self,
-        key: &str,
-        rl: &mut RaylibHandle,
-        thread: &RaylibThread,
-    ) -> Option<&Texture2D> {
+    pub fn load_texture(&mut self, key: &str, rl: &mut RaylibHandle, thread: &RaylibThread) {
         if let Some(path) = self.paths.get(key).map(|s| s.as_str())
             && !self.assets.contains_key(key)
             && let Ok(texture) = rl.load_texture(thread, path)
         {
             self.assets.insert(key.to_string(), texture);
         }
-        self.assets.get(key)
     }
 }
 
@@ -369,7 +361,7 @@ impl Asset {
             return;
         };
         for path in paths {
-            asset_server.get_load(path, rl, thread);
+            asset_server.load_texture(path, rl, thread);
         }
     }
 }

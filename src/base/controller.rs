@@ -1,5 +1,5 @@
 use crate::{
-    base::object::Object,
+    base::{camera::CameraPointer, object::Object},
     engine::{Asset, Combination, Engine, Plugin},
 };
 use raylib::prelude::*;
@@ -8,7 +8,7 @@ use raylib::prelude::*;
 pub struct ControllerPlugin;
 impl Plugin for ControllerPlugin {
     #[inline(always)]
-    fn add_plugin(engine: &mut Engine, rl: &mut RaylibHandle, thread: &RaylibThread) {
+    fn add_plugin(engine: &mut Engine, _: &mut RaylibHandle, _: &RaylibThread) {
         engine
             .add_update(Controller::update)
             .add_update(Player::update)
@@ -25,6 +25,10 @@ impl Plugin for ControllerPlugin {
                     },
                     asset: Asset {
                         path: "space1/Ships/spaceShips_002.png",
+                    },
+                    cam_ptr: CameraPointer {
+                        active: true,
+                        pos: Vector2::zero(),
                     },
                 }
                 .comp(),
@@ -52,20 +56,19 @@ pub struct Player {
     pub controller: Controller,
     pub object: Object,
     pub asset: Asset,
+    pub cam_ptr: CameraPointer,
 }
 impl Combination for Player {
-    type Query<'a> = (&'a Controller, &'a Object, &'a Asset);
-    type QueryMut<'a> = (&'a mut Controller, &'a mut Object, &'a mut Asset);
     fn comp(self) -> impl hecs::DynamicBundle {
-        (self.controller, self.object, self.asset)
+        (self.controller, self.object, self.asset, self.cam_ptr)
     }
 }
 impl Player {
-    pub fn update(engine: &mut Engine, (rl, _): (&mut RaylibHandle, &mut RaylibThread), dt: f32) {
-        let mut target = Vector2::zero();
-        for (controller, object, _) in engine
-            .world
-            .query_mut::<(&mut Controller, &mut Object, &Asset)>()
+    pub fn update(engine: &mut Engine, _: (&mut RaylibHandle, &mut RaylibThread), dt: f32) {
+        for (controller, object, _, cam_ptr) in
+            engine
+                .world
+                .query_mut::<(&mut Controller, &mut Object, &Asset, &mut CameraPointer)>()
         {
             if controller.forward {
                 object.vel += Vector2::new(
@@ -80,12 +83,7 @@ impl Player {
             if controller.right {
                 object.tor += 100.0 * dt;
             }
-            target = object.pos;
+            cam_ptr.pos = object.pos;
         }
-        let Some(old_cam) = engine.resource_mut::<Camera2D>() else {
-            return;
-        };
-        let (w, h) = (rl.get_screen_width(), rl.get_screen_height());
-        old_cam.target = target - (Vector2::new(w as f32, h as f32) / 2.0 / old_cam.zoom);
     }
 }
